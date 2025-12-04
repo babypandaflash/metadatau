@@ -1,106 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>NFT Metadata Viewer</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #fafafa; }
-    h1 { margin-bottom: 12px; }
-    .container { display: flex; gap: 20px; align-items: flex-start; }
-    .list { width: 220px; height: 85vh; overflow-y: auto; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .list a { display:block; padding:7px; margin-bottom:5px; border-radius:6px; text-decoration:none; color:#333; }
-    .list a:hover{ background:#e0e0e0; }
-    .viewer { flex:1; background:white; padding:16px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); height:85vh; overflow:auto; }
-    .nft-image { max-width: 360px; border-radius:10px; display:block; margin-bottom:16px; }
-    pre { background:#111; color:#0f0; padding:12px; border-radius:8px; overflow:auto; }
-    .error { color: #b00020; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JSON Metadata Viewer</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+    }
+    .json-list a {
+        display: block;
+        text-decoration: none;
+        padding: 8px;
+        margin-bottom: 5px;
+        background: #f0f0f0;
+        border-radius: 5px;
+        color: #000;
+    }
+    .json-list a:hover {
+        background: #ddd;
+    }
+    #viewer {
+        margin-top: 20px;
+        padding: 15px;
+        background: #fafafa;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+    }
+    img.preview {
+        width: 300px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+    }
+</style>
 </head>
 <body>
-  <h1>NFT Metadata Viewer</h1>
-  <div class="container">
-    <div class="list" id="jsonList"></div>
-    <div class="viewer" id="viewer">Klik nomor JSON atau buka URL seperti <b>/1.json</b></div>
-  </div>
 
-  <script>
-    const viewer = document.getElementById('viewer');
-    const list = document.getElementById('jsonList');
+<h2>JSON Metadata Viewer</h2>
 
-    // buat daftar clickable
-    for (let i = 1; i <= 4444; i++) {
-      const a = document.createElement('a');
-      a.textContent = i + '.json';
-      a.href = '/' + i + '.json';
-      a.addEventListener('click', (e) => {
-        e.preventDefault();
-        loadJson(i);
-        history.pushState({}, '', '/' + i + '.json');
-      });
-      list.appendChild(a);
+<div class="json-list" id="jsonList"></div>
+
+<div id="viewer"></div>
+
+<script>
+const TOTAL = 4444;
+
+function loadList() {
+    const container = document.getElementById("jsonList");
+    for (let i = 1; i <= TOTAL; i++) {
+        const link = document.createElement("a");
+        link.href = `#${i}`;
+        link.textContent = `Open ${i}.json`;
+        link.onclick = () => loadJSON(i);
+        container.appendChild(link);
     }
+}
 
-    // helper: konversi ipfs://... -> https gateway
-    function resolveImageUrl(url) {
-      if (!url) return url;
-      url = url.toString();
-      if (url.startsWith('ipfs://')) {
-        return url.replace('ipfs://', 'https://ipfs.io/ipfs/');
-      }
-      // sometimes image field is an array or object; this function expects string
-      return url;
-    }
+async function loadJSON(id) {
+    const viewer = document.getElementById("viewer");
+    viewer.innerHTML = "Loading...";
 
-    async function loadJson(id) {
-      viewer.innerHTML = 'Loading...';
-      try {
-        const res = await fetch('/' + id + '.json', { headers: { 'Accept': 'application/json' } });
-        if (!res.ok) {
-          viewer.innerHTML = '<div class="error">Gagal memuat metadata: ' + res.status + '</div>';
-          return;
+    try {
+        // FILE PUBLIC DI VERSEL BISA DIAKSES LANGSUNG DARI ROOT
+        const res = await fetch(`/${id}.json`);
+        if (!res.ok) throw new Error("File not found");
+
+        const json = await res.json();
+
+        let html = "";
+
+        // Jika ada image
+        if (json.image) {
+            html += `<img class="preview" src="${json.image}" alt="image" />`;
         }
-        const data = await res.json();
 
-        // handle common patterns for image field
-        let imageUrl = data.image || data.image_url || null;
-        if (Array.isArray(imageUrl)) imageUrl = imageUrl[0];
-        if (typeof imageUrl === 'object' && imageUrl !== null) {
-          // kadang metadata ada di image.original.url
-          imageUrl = imageUrl.url || imageUrl.original || imageUrl['1'] || null;
-        }
-        imageUrl = resolveImageUrl(imageUrl);
+        // Semua metadata
+        html += `<pre>${JSON.stringify(json, null, 2)}</pre>`;
 
-        const metadataPre = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        const imgHtml = imageUrl ? '<img src="' + imageUrl + '" alt="NFT image" class="nft-image" onerror="this.style.display=\\'none\\'">' : '<div>(Tidak ada gambar)</div>';
-
-        viewer.innerHTML = '<h2>Metadata #' + id + '</h2>' + imgHtml + metadataPre;
-      } catch (err) {
-        console.error(err);
-        viewer.innerHTML = '<div class="error">Terjadi kesalahan saat mengambil metadata.</div>';
-      }
+        viewer.innerHTML = html;
+    } catch (err) {
+        viewer.innerHTML = "Gagal memuat JSON.";
     }
+}
 
-    // handle direct access ke /N.json : jika url match -> loadJson(N)
-    (function handleDirectAccess() {
-      const path = window.location.pathname;
-      const m = path.match(/^\/([0-9]+)\.json$/);
-      if (m) {
-        const id = parseInt(m[1], 10);
-        if (!isNaN(id)) loadJson(id);
-      }
-    })();
+// Jika ada hash di URL (misal domain.com/#12)
+window.onload = () => {
+    loadList();
+    const id = location.hash.replace("#", "");
+    if (id) loadJSON(id);
+};
+</script>
 
-    // optional: handle browser history navigation (back/forward)
-    window.addEventListener('popstate', () => {
-      const path = window.location.pathname;
-      const m = path.match(/^\/([0-9]+)\.json$/);
-      if (m) {
-        loadJson(parseInt(m[1], 10));
-      } else {
-        viewer.innerHTML = 'Klik nomor JSON atau buka URL seperti <b>/1.json</b>';
-      }
-    });
-  </script>
 </body>
 </html>
